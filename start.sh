@@ -2,9 +2,11 @@
 
 : "${SLEEP_INTERVAL:=20}"
 
+: "${CA_SERVER:=letsencrypt}"
+
 ACME_CMD="/usr/local/bin/acme.sh --config-home /acme.sh"
 
-$ACME_CMD --set-default-ca --server letsencrypt
+$ACME_CMD --set-default-ca --server "$CA_SERVER"
 
 while true
 do
