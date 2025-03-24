@@ -29,73 +29,89 @@ do
         domains+=("$domain")
     done
 
-    needs_renewal=0
+    domains_to_issue=()
     domains_to_renew=()
-
-    needs_install=0
     domains_to_install=()
 
+    current_time=$(date +%s)
+
     for domain in "${domains[@]}"; do
-        echo "Checking if certificate needs renewal for domain: $domain"
-        check_output=$(
-          $ACME_CMD --issue --alpn \
-            -d "$domain" 2>&1
-        )
-        echo "$check_output"
-        if ! echo "$check_output" | grep -q "Skipping."; then
-            echo "[Info] Certificate for $domain needs renewal."
-            domains_to_renew+=("$domain")
-            needs_renewal=1
+        echo "=============================="
+        echo "Checking status of $domain ..."
+        echo "------------------------------"
+
+        info_output=$($ACME_CMD --info -d "$domain" 2>&1 || true)
+
+        if echo "$info_output" | grep -q "No such file or directory"; then
+            echo "[Info] $domain: No existing certificate found. Will issue a new one."
+            domains_to_issue+=("$domain")
         else
-            echo "[Info] Certificate for $domain does not need renewal."
+            next_renew_time=$(echo "$info_output" | grep "Le_NextRenewTime=" | cut -d= -f2)
+            if [ -z "$next_renew_time" ]; then
+                echo "[Warning] $domain: Found existing cert info but no 'Le_NextRenewTime'? Will renew."
+                domains_to_renew+=("$domain")
+            else
+                echo "[Info] $domain: Next renewal time = $next_renew_time"
+                if [ "$current_time" -ge "$next_renew_time" ]; then
+                    echo "[Info] $domain: Certificate is due (or past due). Will renew."
+                    domains_to_renew+=("$domain")
+                else
+                    echo "[Info] $domain: Certificate is still valid, no immediate renewal needed."
+                fi
+            fi
         fi
 
-        echo "Checking if certificate needs install for domain: $domain"
-        if [ ! -d "/etc/nginx/ssl/${domain}" ]; then
-            echo "[Info] Certificate for $domain needs install."
+        ssl_dir="/etc/nginx/ssl/${domain}"
+        if [ ! -d "$ssl_dir" ]; then
+            echo "[Info] $domain: /etc/nginx/ssl/$domain folder not found → must install cert files here."
             domains_to_install+=("$domain")
-            needs_install=1
         else
-            echo "[Info] Certificate for $domain does not need install."
+            echo "[Info] $domain: Certificate directory already exists."
         fi
     done
 
-    if [ $needs_renewal -eq 1 ]; then
-        echo "[Info] Some certificates need renewal. Stopping Nginx..."
-        nginx -s stop || true
-        for domain in "${domains_to_renew[@]}"; do
-            echo "[Info] Issuing/renewing certificate for: $domain"
-            rm -rf "/etc/nginx/ssl/${domain}"
-            mkdir -p "/etc/nginx/ssl/${domain}"
-            $ACME_CMD --issue --alpn \
-              -d "$domain" \
-              --key-file "/etc/nginx/ssl/${domain}/key.pem" \
-              --fullchain-file "/etc/nginx/ssl/${domain}/cert.pem"
-        done
-        echo "[Info] Starting Nginx..."
-        nginx
+    if [ ${#domains_to_issue[@]} -gt 0 ] || [ ${#domains_to_renew[@]} -gt 0 ] || [ ${#domains_to_install[@]} -gt 0 ]; then
+        echo "[Info] Changes required (issue/renew/install). Stopping Nginx..."
+        pidof nginx >/dev/null 2>&1 && nginx -s stop || true
     else
-        echo "[Info] No certificates need renewal. Not restarting Nginx."
+        echo "[Info] No changes required. Not restarting Nginx."
     fi
 
-    if [ $needs_install -eq 1 ]; then
-        echo "[Info] Some certificates need install. Stopping Nginx..."
-        nginx -s stop || true
-        for domain in "${domains_to_install[@]}"; do
-            echo "[Info] Installing certificate for: $domain"
-            mkdir -p "/etc/nginx/ssl/${domain}"
-            $ACME_CMD --install-cert \
-              -d "$domain" \
-              --key-file "/etc/nginx/ssl/${domain}/key.pem" \
-              --fullchain-file "/etc/nginx/ssl/${domain}/cert.pem"
-        done
+    for domain in "${domains_to_issue[@]}"; do
+        echo "[Info] *** Issuing a new certificate for domain: $domain ***"
+        rm -rf "/etc/nginx/ssl/${domain}"
+        mkdir -p "/etc/nginx/ssl/${domain}"
+        $ACME_CMD --issue --alpn \
+          -d "$domain" \
+          --key-file "/etc/nginx/ssl/${domain}/key.pem" \
+          --fullchain-file "/etc/nginx/ssl/${domain}/cert.pem"
+    done
+
+    for domain in "${domains_to_renew[@]}"; do
+        echo "[Info] *** Renewing certificate for domain: $domain ***"
+        rm -rf "/etc/nginx/ssl/${domain}"
+        mkdir -p "/etc/nginx/ssl/${domain}"
+        $ACME_CMD --renew --alpn \
+          -d "$domain" \
+          --key-file "/etc/nginx/ssl/${domain}/key.pem" \
+          --fullchain-file "/etc/nginx/ssl/${domain}/cert.pem"
+    done
+
+    for domain in "${domains_to_install[@]}"; do
+        echo "[Info] *** Installing certificate for domain: $domain ***"
+        mkdir -p "/etc/nginx/ssl/${domain}"
+        $ACME_CMD --install-cert \
+          -d "$domain" \
+          --key-file "/etc/nginx/ssl/${domain}/key.pem" \
+          --fullchain-file "/etc/nginx/ssl/${domain}/cert.pem"
+    done
+
+    if [ ${#domains_to_issue[@]} -gt 0 ] || [ ${#domains_to_renew[@]} -gt 0 ] || [ ${#domains_to_install[@]} -gt 0 ]; then
         echo "[Info] Starting Nginx..."
         nginx
-    else
-        echo "[Info] No certificates need install. Not restarting Nginx."
     fi
 
-    echo "[Info] Sleeping $SLEEP_INTERVAL..."
+    echo "[Info] Sleeping $SLEEP_INTERVAL seconds..."
     sleep "$SLEEP_INTERVAL"
 done
 
