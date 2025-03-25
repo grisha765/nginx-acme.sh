@@ -13,6 +13,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        base_tag: [latest, alpine, bookworm]
 
     steps:
       - name: Checkout code
@@ -28,13 +31,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Replace base image in Dockerfile
+        run: sed -i "s#docker.io/nginx:latest#docker.io/nginx:${{ matrix.base_tag }}#g" dockerfile
+
+      - name: Install bash for Alpine
+        if: ${{ matrix.base_tag == 'alpine' }}
+        run: sed -i '/^FROM/ a RUN apk add --no-cache bash' dockerfile
+
       - name: Determine the Docker tag
         id: get_tag
+        env:
+          BASE_TAG: ${{ matrix.base_tag }}
         run: |
           if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "::set-output name=tag::ghcr.io/${{ github.repository }}:latest"
+            echo "::set-output name=tag::ghcr.io/${{ github.repository }}:${BASE_TAG}"
           elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
-            echo "::set-output name=tag::ghcr.io/${{ github.repository }}:${{ github.sha }}"
+            echo "::set-output name=tag::ghcr.io/${{ github.repository }}:${{ github.sha }}-${BASE_TAG}"
           fi
 
       - name: Build and push Docker image
