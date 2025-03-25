@@ -28,7 +28,11 @@ do
         if [ "$domain" = "default" ]; then
             continue
         fi
-        domains+=("$domain")
+        if grep -q "443" "$f" && \
+           grep -q "ssl_certificate" "$f" && \
+           grep -q "ssl_certificate_key" "$f"; then
+            domains+=("$domain")
+        fi
     done
 
     domains_to_issue=()
