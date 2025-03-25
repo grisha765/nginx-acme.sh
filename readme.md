@@ -42,7 +42,7 @@ This project provides a Dockerized Nginx container that automatically manages SS
     -e CA_SERVER=letsencrypt \
     -v /path/to/nginx.conf:/etc/nginx/conf.d \
     -v acme.sh-config:/acme.sh \
-    localhost/nginx-acmesh:latest
+    ghcr.io/grisha765/nginx-acme.sh:latest
     ```
 
 # Features
