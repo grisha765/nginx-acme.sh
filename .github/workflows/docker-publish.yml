@@ -6,7 +6,6 @@ on:
       - main
       - dev
     paths-ignore:
-      - '.github/**'
       - 'readme.md'
   workflow_dispatch:
 
@@ -36,7 +35,7 @@ jobs:
 
       - name: Install bash for Alpine
         if: ${{ matrix.base_tag == 'alpine' }}
-        run: sed -i '/^FROM/ a RUN apk add --no-cache bash' dockerfile
+        run: sed -i '/^FROM/ a RUN apk add --no-cache bash openssl' dockerfile
 
       - name: Determine the Docker tag
         id: get_tag
