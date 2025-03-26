@@ -117,7 +117,7 @@ do
         nginx
     fi
 
-    echo "[Info] Sleeping $SLEEP_INTERVAL seconds..."
+    echo "[Info] Sleeping $SLEEP_INTERVAL..."
     sleep "$SLEEP_INTERVAL"
 done
 
