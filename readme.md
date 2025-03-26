@@ -45,6 +45,12 @@ This project provides a Dockerized Nginx container that automatically manages SS
     ghcr.io/grisha765/nginx-acme.sh:latest
     ```
 
+- Other working env's:
+    ```env
+    SLEEP_INTERVAL=20 # 20, 20m, 20h, 20d
+    CA_SERVER=letsencrypt # See: https://github.com/acmesh-official/acme.sh/wiki/Server
+    ```
+
 # Features
 
 - Dockerized Nginx: Runs on the official Nginx image.
